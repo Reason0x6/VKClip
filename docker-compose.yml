@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  clipar:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./clips:/app/clips
+    environment:
+      - FLASK_ENV=development
+    stdin_open: true
+    tty: true
