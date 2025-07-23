@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1.0">
+    <title>Advanced Video Clipper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="dashboard">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Video Clipper</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active">
+                    Dashboard
+                </a>
+                <a href="#" class="nav-item">
+                    My Videos
+                </a>
+                <a href="#" class="nav-item">
+                    New Clips
+                </a>
+                <a href="#" class="nav-item">
+                    Settings
+                </a>
+            </nav>
+        </div>
+        
+        <div class="main-content">
+            <div class="top-bar">
+                <div class="search-bar">
+                    <input type="text" placeholder="Search videos..." />
+                </div>
+                <div class="user-menu">
+                    <div class="user-avatar"></div>
+                </div>
+            </div>
+            
+            <div class="content-area">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    {% for category, message in messages %}
+                      <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
+                
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ clips|length }}</div>
+                        <div class="stat-label">Total Clips</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ available_videos|length }}</div>
+                        <div class="stat-label">Videos Available</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value "><span id="duration-text">--:--:--.---</span></div>
+                         <div class="stat-label " >Video Duration: </div>
+                    </div>
+                    </div>
+                   
+              
+
+                
+                <!-- Main Form -->
+                <form method="post" enctype="multipart/form-data" action="/upload" class="clip-form">
+                    <div class="form-grid">
+                        <!-- Video Source Selection -->
+                        <div class="form-card">
+                            <div class="card-header">
+                                <h3>Video Source</h3>
+                                <p class="card-subtitle">Select how you want to provide your video</p>
+                            </div>
+                            <div class="card-content">
+                                <div class="radio-group">
+                                    <label class="radio-option">
+                                        <input type="radio" name="video_source" value="file" checked>
+                                        <span class="radio-custom"></span>
+                                        <div class="radio-content">
+                                            <div class="radio-title">Upload File</div>
+                                            <div class="radio-description">Upload a video from your device</div>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="video_source" value="url">
+                                        <span class="radio-custom"></span>
+                                        <div class="radio-content">
+                                            <div class="radio-title">Download from URL</div>
+                                            <div class="radio-description">Download from YouTube or other platforms</div>
+                                        </div>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="video_source" value="existing">
+                                        <span class="radio-custom"></span>
+                                        <div class="radio-content">
+                                            <div class="radio-title">Use Existing Video</div>
+                                            <div class="radio-description">Select from previously uploaded videos</div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- File Upload Section -->
+                        <div id="file-input-section" class="form-card">
+                            <div class="card-header">
+                                <h3>Upload Video File</h3>
+                                <p class="card-subtitle">Select a video file from your computer</p>
+                            </div>
+                            <div class="card-content">
+                                <div class="file-upload">
+                                    <input type="file" name="file" id="video-file" accept="video/*" class="file-input">
+                                    <label for="video-file" class="file-label">
+                                        <div class="file-icon">�</div>
+                                        <div class="file-text">
+                                            <span class="file-title">Choose a video file</span>
+                                            <span class="file-subtitle">MP4, AVI, MOV up to 2GB</span>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                            </div>
+                        </div>
+
+                        <!-- URL Download Section -->
+                        <div id="url-input-section" class="form-card " style="display: none;">
+                            <div class="card-header">
+                                <h3>Download from URL</h3>
+                                <p class="card-subtitle">Download video from YouTube or other platforms</p>
+                            </div>
+                            <div class="card-content">
+                                <div class="input-group">
+                                    <input type="text" name="video_url" id="video-url" placeholder="https://www.youtube.com/watch?v=..." class="url-input">
+                                    <button type="button" class="btn btn-primary" onclick="loadVideoFromUrl()">
+                                        Load Video
+                                    </button>
+                                </div>
+                                
+                            </div>
+                        </div>
+
+                        <!-- Existing Video Section -->
+                        <div id="existing-clip-section"  class="form-card " style="display: none;">
+                            <div class="card-header">
+                                <h3>Use Existing Video</h3>
+                                <p class="card-subtitle">Select from previously uploaded videos</p>
+                            </div>
+                            <div class="card-content">
+                                <select name="existing_clip" id="existing-clip" class="select-input">
+                                    <option value="">Select a video</option>
+                                    {% for video in available_videos %}
+                                    <option value="{{ video.source }}:{{ video.filename }}">{{ video.display_name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline" onclick="loadExistingClip()">Load Video</button>
+                                
+                            </div>
+                        </div>
+                    </div>
+                     <div class="container" id="video-download" style="display: none;">
+                        <h3><span id="download-text"></span></h3>
+                    </div>
+                    
+
+                    <!-- Clip Definition Section -->
+                    <div class="clips-section">
+                        <div class="section-header">
+                            <h2>Define Clips and Time Segments</h2>
+                            <p class="section-subtitle">Create multiple clips with precise time segments</p>
+                        </div>
+                        
+                        <div id="video-not-loaded" class="empty-state">
+                            <h3>No Video Selected</h3>
+                            <p>Please select a video source above to start creating clips</p>
+                        </div>
+                        
+                        <div id="clips-container" class="clips-grid" style="display: none"></div>
+                        
+                        <div id="clip-controls" class="clip-controls" style="display: none">
+                            <button type="button" class="btn btn-outline" onclick="addClip()">
+                                Add Another Clip
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                Process and Create All Clips
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- Available Clips Section -->
+                <div class="clips-library">
+                    <div class="section-header">
+                        <div>
+                            <h2>Clip Library</h2>
+                            <p class="section-subtitle">Download your processed video clips</p>
+                        </div>
+                        <button type="button" class="btn btn-danger" onclick="clearAllClips()">
+                            Clear All Clips
+                        </button>
+                    </div>
+                    
+                    <div class="clips-table-container">
+                        <table class="clips-table">
+                            <thead>
+                                <tr>
+                                    <th>Filename</th>
+                                    <th>Status</th>
+                                    <th>Size</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for clip in clips %}
+                                <tr>
+                                    <td>
+                                        <div class="file-info">
+                                            <span>{{ clip }}</span>
+                                        </div>
+                                    </td>
+                                    <td><span class="status-badge completed">Completed</span></td>
+                                    <td>--</td>
+                                    <td>
+                                        <a href="{{ url_for('download_clip', filename=clip) }}" class="btn btn-sm btn-outline">
+                                            Download
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" class="empty-table">
+                                        <div class="empty-state-small">
+                                            <p>No clips have been created yet. Upload a video and create your first clip!</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+      </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
