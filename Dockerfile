@@ -18,4 +18,7 @@ ENV FLASK_APP=app.py
 
 EXPOSE 5000
 
+# Install ffmpeg for video processing
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 ENTRYPOINT ["/entrypoint.sh"]
