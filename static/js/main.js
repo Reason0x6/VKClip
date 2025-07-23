@@ -406,9 +406,26 @@ window.onload = () => {
     });
     
     // Handle form submission to show progress
-    document.querySelector('form').addEventListener('submit', function(event) {
-        const submitButton = event.target.querySelector('input[type="submit"]');
-        submitButton.value = '⚙️ Processing Clips...';
+    document.querySelector('form').addEventListener('submit', function(event) { 
+        event.preventDefault(); // Prevent the default form submission behavior
+        // send the form data to the server via fetch here
+        const formData = new FormData(event.target);
+        clipID = ''
+        fetch('/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Success:', data);
+            clipID = data.clip_id;
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+        });
+
+        const submitButton = event.target.querySelector('button[type="submit"]'); // Updated selector to target <button>
+        submitButton.textContent = '⚙️ Processing Clips...';
         submitButton.disabled = true;
         
         // Create progress overlay
@@ -427,11 +444,9 @@ window.onload = () => {
             z-index: 1000;
         `;
         progressOverlay.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 500px; width: 90%;">
+            <div style="padding: 30px; border-radius: 10px; text-align: center; max-width: 500px; width: 90%;">
                 <h3 style="margin: 0 0 1rem 0; color: var(--foreground);">🎬 Clip Processing Progress</h3>
-                <div class="progress" style="margin: 1rem 0;">
-                    <div class="progress-bar" id="processing-progress" style="width: 0%;">0%</div>
-                </div>
+
                 <div id="processing-status">Processing clips...</div>
                 <p style="margin-top: 1rem; color: #666; font-size: 14px;">This may take a few minutes depending on the video size and number of clips.</p>
             </div>
@@ -440,17 +455,14 @@ window.onload = () => {
         
         // Start progress monitoring
         setTimeout(() => {
-            const eventSource = new EventSource('/processing_progress');
+            const eventSource = new EventSource('/clip_progress/'+clipID);
             
             eventSource.onmessage = function(event) {
+                console.log('Progress update:', event.data);
                 const data = JSON.parse(event.data);
-                const progressBar = document.getElementById('processing-progress');
                 const statusDiv = document.getElementById('processing-status');
                 
-                if (progressBar && statusDiv) {
-                    const percentage = Math.round(data.percentage || 0);
-                    progressBar.style.width = percentage + '%';
-                    progressBar.textContent = percentage + '%';
+                if (statusDiv) {
                     statusDiv.textContent = data.message || 'Processing...';
                     
                     if (data.status === 'completed' || data.status === 'error') {

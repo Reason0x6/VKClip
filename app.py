@@ -426,6 +426,7 @@ def upload_file():
 def process_clips_background(clip_id, form_data, files):
     """Background function to process clips with progress updates."""
     def update_clip_progress(stage, percent, message=""):
+        print(f"Updating progress for clip {clip_id}: {stage} - {percent}% - {message}")
         clip_progress[clip_id] = {
             'stage': stage,
             'percent': percent,
@@ -645,7 +646,7 @@ def clip_progress_endpoint(clip_id):
             
             time.sleep(1)
     
-    return Response(generate(), mimetype='text/plain')
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/clip_status/<clip_id>')
 def clip_status(clip_id):
