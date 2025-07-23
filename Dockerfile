@@ -1,20 +1,21 @@
-# Use the official Python image as a base image
-FROM python:3.9-slim
+FROM python:3.8-slim
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements file into the container
-COPY requirements.txt ./
+COPY requirements.txt /app
 
-# Install the Python dependencies
+RUN apt-get update && apt-get install -y netcat-traditional && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code into the container
-COPY . .
+COPY . /app
 
-# Expose the port the app runs on
+# RUN flask db init
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV FLASK_APP=app.py
+
 EXPOSE 5000
 
-# Command to run the application
-CMD ["python", "app.py"]
+ENTRYPOINT ["/entrypoint.sh"]

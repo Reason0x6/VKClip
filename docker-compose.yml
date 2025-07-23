@@ -9,6 +9,7 @@ services:
       - ./uploads:/app/uploads
       - ./clips:/app/clips
     environment:
-      - FLASK_ENV=development
+      FLASK_APP: app.py
+      FLASK_ENV: development
     stdin_open: true
     tty: true
