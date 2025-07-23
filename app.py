@@ -79,20 +79,19 @@ def process_clip(original_filepath, clip_filepath, command):
 
 def download_video_from_url(url, download_path, download_id):
     """Download video from URL using yt-dlp with real-time progress tracking."""
-    
+
     def update_progress(stage, percent, message=""):
         download_progress[download_id] = {
             'stage': stage,
             'percent': percent,
             'message': message
         }
-    
+
     def progress_hook(d):
         """Progress hook for yt-dlp to track download progress."""
         if d['status'] == 'downloading':
             # Extract percentage from yt-dlp
             if '_percent_str' in d:
-                # Clean ANSI color codes from percent string
                 import re
                 percent_str = re.sub(r'\x1b\[[0-9;]*m', '', d['_percent_str']).strip().replace('%', '')
                 try:
@@ -101,72 +100,60 @@ def download_video_from_url(url, download_path, download_id):
                     percent = 0
             else:
                 percent = 0
-            
-            # Clean and format speed and ETA
+
             speed = d.get('_speed_str', 'Unknown')
             eta = d.get('_eta_str', 'Unknown')
-            
-            # Remove ANSI color codes from speed and ETA
+
             if speed != 'Unknown':
                 speed = re.sub(r'\x1b\[[0-9;]*m', '', speed).strip()
             if eta != 'Unknown':
                 eta = re.sub(r'\x1b\[[0-9;]*m', '', eta).strip()
-            
-            # Create a clean, formatted message
+
             message = f"Downloading... {percent:.1f}% (Speed: {speed}, ETA: {eta})"
-            
             update_progress('downloading', percent, message)
-            
+
         elif d['status'] == 'finished':
             update_progress('processing', 95, 'Download finished, processing...')
-    
+
     try:
-        # Initialize progress
         update_progress('starting', 0, 'Preparing download...')
-        
-        # Import yt-dlp
+
         try:
             import yt_dlp
         except ImportError:
-            # Fallback to subprocess if yt-dlp module not available
             return download_video_subprocess(url, download_path, download_id)
-        
-        # Generate filenames
+
         unique_id = str(uuid.uuid4())
-        output_template = os.path.join(download_path, f"{unique_id}.%(ext)s")
-        
-        # Configure yt-dlp options
+        output_template = os.path.join(download_path, f"%(title)s.%(ext)s")
+
         ydl_opts = {
-            'format': 'bv*+ba/b',  # Best video + best audio
+            'format': 'bv*+ba/b',
             'outtmpl': output_template,
             'noplaylist': True,
             'progress_hooks': [progress_hook],
         }
-        
+
         update_progress('downloading', 0, 'Starting download...')
-        
-        # Download using yt-dlp
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        
-        # Find the downloaded file
+
         downloaded_files = []
         for file in os.listdir(download_path):
-            if file.startswith(unique_id):
+            if file.endswith(('.mp4', '.mkv', '.webm', '.avi', '.mov')):
                 downloaded_files.append(file)
-        
+
         if not downloaded_files:
             update_progress('error', 0, 'No files were downloaded')
             return {'status': 'error', 'message': 'No files were downloaded'}
-        
-        # Use the first downloaded file
+
         downloaded_file = downloaded_files[0]
         downloaded_path = os.path.join(download_path, downloaded_file)
-        
+
         update_progress('complete', 100, 'Download complete!')
-        
+
         return {'status': 'success', 'filepath': downloaded_path, 'filename': downloaded_file}
-        
+
     except Exception as e:
         update_progress('error', 0, f'Download error: {str(e)}')
         return {'status': 'error', 'message': f'Download error: {str(e)}'}
