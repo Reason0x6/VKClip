@@ -433,13 +433,15 @@ def process_clips_background(clip_id, form_data, files):
             'message': message,
             'status': 'processing'
         }
-    
+
     try:
         update_clip_progress("initializing", 5, "Starting clip processing...")
-        
+
         video_source = form_data.get('video_source', 'file')
+        folder = form_data.get('folder', '').strip()
+        season = form_data.get('season', '').strip()
         unique_id = str(uuid.uuid4())
-        
+
         # Handle different video sources
         if video_source == 'file':
             update_clip_progress("file_upload", 10, "Processing uploaded file...")
@@ -447,12 +449,12 @@ def process_clips_background(clip_id, form_data, files):
             if not file or file.filename == '' or not allowed_file(file.filename):
                 clip_progress[clip_id] = {'status': 'error', 'message': 'Invalid file'}
                 return
-                
+
             original_extension = file.filename.rsplit('.', 1)[1].lower()
             original_filename = f"{unique_id}.{original_extension}"
             original_filepath = os.path.join(app.config['UPLOAD_FOLDER'], original_filename)
             file.save(original_filepath)
-            
+
         elif video_source == 'url':
             update_clip_progress("url_download", 10, "Downloading video from URL...")
             video_url = form_data.get('video_url', '').strip()
@@ -563,8 +565,20 @@ def process_clips_background(clip_id, form_data, files):
                     return
 
             safe_base_name = secure_filename(data['name'])
+
+            # Build the directory structure
+            clip_dir = app.config['CLIPS_FOLDER']
+            if folder:
+                clip_dir = app.config['JELLYFIN_FOLDER']
+                clip_dir = os.path.join(clip_dir, secure_filename(folder))
+            if season:
+                clip_dir = os.path.join(clip_dir, secure_filename(season))
+            clip_dir = os.path.join(clip_dir, safe_base_name)
+
+            os.makedirs(clip_dir, exist_ok=True)
+
             clip_filename = f"{safe_base_name}.mp4"
-            clip_filepath = os.path.join(app.config['CLIPS_FOLDER'], clip_filename)
+            clip_filepath = os.path.join(clip_dir, clip_filename)
 
             command = []
             temp_files = []
@@ -612,7 +626,7 @@ def process_clips_background(clip_id, form_data, files):
                         os.remove(temp_file)
                 if concat_list_path and os.path.exists(concat_list_path):
                     os.remove(concat_list_path)
-            
+
             processed_clips += 1
 
         # Clean up original file

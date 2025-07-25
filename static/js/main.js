@@ -408,8 +408,20 @@ window.onload = () => {
     // Handle form submission to show progress
     document.querySelector('form').addEventListener('submit', function(event) { 
         event.preventDefault(); // Prevent the default form submission behavior
-        // send the form data to the server via fetch here
+
         const formData = new FormData(event.target);
+
+        // Add folder and season inputs to the form data
+        const folderInput = document.getElementById('folder');
+        const seasonInput = document.getElementById('season');
+        if (folderInput && folderInput.value.trim()) {
+            formData.append('folder', folderInput.value.trim());
+        }
+        if (seasonInput && seasonInput.value.trim()) {
+            formData.append('season', seasonInput.value.trim());
+        }
+
+        // send the form data to the server via fetch here
         clipID = ''
         fetch('/upload', {
             method: 'POST',
