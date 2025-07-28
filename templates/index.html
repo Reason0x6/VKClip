@@ -16,7 +16,7 @@
                 <a href="#" class="nav-item active">
                     Dashboard
                 </a>
-                <a href="#" class="nav-item">
+                <!-- <a href="#" class="nav-item">
                     My Videos
                 </a>
                 <a href="#" class="nav-item">
@@ -24,7 +24,7 @@
                 </a>
                 <a href="#" class="nav-item">
                     Settings
-                </a>
+                </a> -->
             </nav>
         </div>
         
@@ -174,9 +174,15 @@
                                 <div class="input-group" style="margin: 15px 0;">
                                     <input type="text" id="season" name="season" placeholder="e.g., Season1" class="url-input">
                                 </div>
+                                <label>
+                                    <input type="checkbox" id="ffmpeg-pre-split" name="ffmpeg_pre_split" onchange="toggleFFmpegPreSplit(this)">
+                                    Enable FFmpeg Pre-Split Downloading
+                                </label>
                             </div>
                         </div>
-                    </div>
+                        </div>
+
+                       
                      <div class="container" id="video-download" style="display: none;">
                         <h3><span id="download-text"></span></h3>
                     </div>
@@ -263,5 +269,6 @@
     </div>
       </div>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
 </body>
 </html>

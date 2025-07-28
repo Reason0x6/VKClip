@@ -21,14 +21,15 @@ function addClip() {
         <button type="button" onclick="addSegment(${clipCounter})" class="btn btn-primary" class="btn btn-outline btn-small">➕ Add Time Segment</button>
     `;
     container.appendChild(newClipGroup);
-    addSegment(clipCounter);
+    addSegment(clipCounter, true);
 }
 
 function removeClip(clipIndex) { 
     document.getElementById('clip-group-' + clipIndex)?.remove();
 }
 
-function addSegment(clipIndex) {
+function addSegment(clipIndex, override = false) {
+    if(!override && document.getElementById('ffmpeg-pre-split').checked ){return}
     const segmentIndex = segmentCounters[clipIndex]++;
     const container = document.getElementById(`segments-container-${clipIndex}`);
     
@@ -125,12 +126,12 @@ function createFirstClip() {
         <input type="text" id="clip_name_0" name="clip_name_0" value="Clipar_clip" required>
         </div>
         <div id="segments-container-0"></div>
-        <button type="button" onclick="addSegment(0)" class="btn btn-primary" class="btn btn-outline btn-small">➕ Add Time Segment</button>
+        <button type="button" onclick="addSegment(0)" class="btn btn-primary segments" class="btn btn-outline btn-small">➕ Add Time Segment</button>
     `;
     clipsContainer.appendChild(newClipGroup);
     
     // Add the first segment
-    addSegment(0);
+    addSegment(0, true);
 }
 
 function resetClipsUI() {
@@ -356,6 +357,60 @@ async function clearAllClips() {
     }
 }
 
+async function processFFmpegPreSplitClips() {
+    const clipsContainer = document.getElementById('clips-container');
+    const clips = clipsContainer.querySelectorAll('.clip-group');
+    const progressContainer = document.getElementById('video-download');
+    const progressText = document.getElementById('download-text');
+
+    progressContainer.style.display = 'block';
+    progressText.innerHTML = 'Starting FFmpeg Pre-Split Download...';
+
+    clips.forEach(async (clip, index) => {
+        const clipName = clip.querySelector('input[name^="clip_name_"]').value;
+        const start = constructTimeCode(index, 0, 'start');
+        const end =  constructTimeCode(index, 0, 'end');
+        const url = document.getElementById('video-url').value;
+        const folder = document.getElementById('folder').value;
+        console.log(`Processing clip: ${clipName}, Start: ${start}, End: ${end}, URL: ${url}, Folder: ${folder}`);
+        try {
+            const response = await fetch('/process_ffmpeg_pre_split', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    clip_name: clipName,
+                    start,
+                    end,
+                    url,
+                    folder
+                })
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                progressText.innerHTML += `<br>Clip "${clipName}" processed successfully.`;
+            } else {
+                progressText.innerHTML += `<br>Error processing clip "${clipName}".`;
+            }
+        } catch (error) {
+            progressText.innerHTML += `<br>Error processing clip "${clipName}": ${error.message}`;
+        }
+    });
+
+    progressText.innerHTML += '<br>All clips processed.';
+}
+
+function constructTimeCode(clipIndex, segmentIndex, type) {
+    const hours = document.querySelector(`input[name="clip_${clipIndex}_${type}_hours_${segmentIndex}"]`).value || 0;
+    const minutes = document.querySelector(`input[name="clip_${clipIndex}_${type}_minutes_${segmentIndex}"]`).value || 0;
+    const seconds = document.querySelector(`input[name="clip_${clipIndex}_${type}_seconds_${segmentIndex}"]`).value || 0;
+    const milliseconds = document.querySelector(`input[name="clip_${clipIndex}_${type}_milliseconds_${segmentIndex}"]`).value || 0;
+
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+}
+
 // Initialize on page load
 window.onload = () => {
     clipCounter = 0;
@@ -393,7 +448,8 @@ window.onload = () => {
             // Hide duration and reset clips when switching sources
             
             durationText.textContent = '--:--:--.---';
-            resetClipsUI();
+            document.getElementById('ffmpeg-pre-split').checked = false;
+            toggleFFmpegPreSplit(false);
         });
     });
     
@@ -408,7 +464,10 @@ window.onload = () => {
     // Handle form submission to show progress
     document.querySelector('form').addEventListener('submit', function(event) { 
         event.preventDefault(); // Prevent the default form submission behavior
-
+        if( document.getElementById('ffmpeg-pre-split').checked){
+            processFFmpegPreSplitClips();
+            return;
+        }
         const formData = new FormData(event.target);
 
         // Add folder and season inputs to the form data
@@ -492,3 +551,11 @@ window.onload = () => {
         }, 500);
     });
 };
+
+function toggleFFmpegPreSplit(checkbox) {
+    if (checkbox.checked) {
+       createFirstClip();
+    } else {
+       resetClipsUI();
+    }
+}

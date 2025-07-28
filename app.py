@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 import uuid
 import re
@@ -17,6 +18,7 @@ import time
 import json
 import re
 import shutil
+import yt_dlp
 
 app = Flask(__name__)
 
@@ -127,7 +129,8 @@ def download_video_from_url(url, download_path, download_id):
         output_template = os.path.join(download_path, f"%(title)s.%(ext)s")
 
         ydl_opts = {
-            'format': 'bv*+ba/b',
+            'format': 'bv*+ba/b',  # Prioritize AV1-encoded sources
+            'format_sort': ['res', 'filesize'], 
             'outtmpl': output_template,
             'noplaylist': True,
             'progress_hooks': [progress_hook],
@@ -411,8 +414,12 @@ def upload_file():
     """Main upload handler that starts background processing."""
     clip_id = str(uuid.uuid4())
     
-    # Extract form data and files
     form_data = dict(request.form)
+    if( form_data.get('ffmpeg_pre_split') == 'true'):
+        # Forward request to /process_ffmpeg_pre_split
+        return redirect(url_for('process_ffmpeg_pre_split'))
+        
+    # Extract form data and files
     files = dict(request.files)
     
     # Start background processing
@@ -567,15 +574,12 @@ def process_clips_background(clip_id, form_data, files):
             safe_base_name = secure_filename(data['name'])
 
             # Build the directory structure
-            clip_dir = app.config['CLIPS_FOLDER']
-            if folder:
-                clip_dir = app.config['JELLYFIN_FOLDER']
-                clip_dir = os.path.join(clip_dir, secure_filename(folder))
-            if season:
-                clip_dir = os.path.join(clip_dir, secure_filename(season))
-            clip_dir = os.path.join(clip_dir, safe_base_name)
-
-            os.makedirs(clip_dir, exist_ok=True)
+            clip_dir = build_clip_directory(
+                app.config['CLIPS_FOLDER'],
+                folder=folder,
+                season=season,
+                safe_base_name=safe_base_name
+            )
 
             clip_filename = f"{safe_base_name}.mp4"
             clip_filepath = os.path.join(clip_dir, clip_filename)
@@ -587,9 +591,9 @@ def process_clips_background(clip_id, form_data, files):
             if len(segments) == 1:
                 seg = segments[0]
                 command = [
-                    'ffmpeg', '-i', original_filepath, '-ss', seg['start'],
+                    'ffmpeg', '-ss', seg['start'], '-i', original_filepath,
                     '-to', seg['end'], '-c:v', 'libx264', '-c:a', 'aac',
-                    '-preset', 'fast', '-crf', '23', '-y', clip_filepath
+                    '-preset', 'fast', '-crf', '23', '-copyts', '-y', clip_filepath
                 ]
             else:
                 temp_files = []
@@ -599,9 +603,9 @@ def process_clips_background(clip_id, form_data, files):
                     temp_files.append(temp_filepath)
                     
                     segment_command = [
-                        'ffmpeg', '-i', original_filepath, '-ss', seg['start'],
+                        'ffmpeg', '-ss', seg['start'], '-i', original_filepath,
                         '-to', seg['end'], '-c:v', 'libx264', '-c:a', 'aac',
-                        '-preset', 'fast', '-crf', '23', '-y', temp_filepath
+                        '-preset', 'fast', '-crf', '23', '-copyts', '-y', temp_filepath
                     ]
                     
                     subprocess.run(segment_command, check=True, capture_output=True, text=True)
@@ -613,7 +617,7 @@ def process_clips_background(clip_id, form_data, files):
                 
                 command = [
                     'ffmpeg', '-f', 'concat', '-safe', '0', '-i', concat_list_path,
-                    '-c', 'copy', '-y', clip_filepath
+                    '-c', 'copy', '-copyts', '-y', clip_filepath
                 ]
 
             # Process the clip
@@ -696,6 +700,141 @@ def clear_clips():
         flash(f'Error clearing clips: {str(e)}', 'error')
     
     return jsonify({'success': True, 'deleted_count': deleted_count})
+
+def ffmpeg_progress_hook(d):
+    """A progress hook function for yt-dlp to display download speed and update state."""
+    # This print helps confirm the hook is being called at all.
+    print(f"Hook received data: {d.get('status')}")
+
+    if d['status'] == 'downloading':
+        filename = d.get('filename', 'unknown')
+        total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
+        downloaded_bytes = d.get('downloaded_bytes')
+
+        if total_bytes and downloaded_bytes:
+            percent = (downloaded_bytes / total_bytes) * 100
+            
+            # Update the global progress dictionary
+            download_progress[filename] = {
+                'status': 'downloading',
+                'percent': percent,
+            }
+            print(f"--> Downloading {filename}: {percent:.2f}%")
+    
+    elif d['status'] == 'finished':
+        filename = d.get('filename', 'unknown')
+        print(f"--> Finished downloading {filename}")
+    
+
+@app.route('/process_ffmpeg_pre_split', methods=['POST'])
+def process_ffmpeg_pre_split():
+    """
+    Downloads and trims a video segment using the yt-dlp Python library
+    with native section downloading and progress reporting.
+    """
+
+    
+    data = request.json
+    clip_name = data.get('clip_name')
+    start = data.get('start')
+    end = data.get('end')
+    url = data.get('url')
+    folder = data.get('folder', '') # Default to empty string if not provided
+
+    if not all([clip_name, start, end, url]):
+        return jsonify({'error': 'Missing required parameters: clip_name, start, end, url are required.'}), 400
+    
+    print(f"Processing pre-split clip: {clip_name}, start: {start}, end: {end}, url: {url}, folder: {folder}")
+
+    try:
+        # Validate that end time is after start time.
+        start_seconds = timestamp_to_seconds(start)
+        end_seconds = timestamp_to_seconds(end)
+        if end_seconds <= start_seconds:
+            return jsonify({'error': 'End time must be after start time.'}), 400
+
+        safe_clip_name = secure_filename(clip_name)
+        clip_dir = build_clip_directory(app.config['CLIPS_FOLDER'], folder=folder, safe_base_name=safe_clip_name)
+        
+        # The final output path that yt-dlp will create.
+        final_output_path = os.path.join(clip_dir, f"{safe_clip_name}.mp4")
+
+        # A callback function for yt-dlp to determine the download range.
+        def download_ranges_callback(info_dict, ydl):
+            return [{'start_time': start_seconds, 'end_time': end_seconds}]
+
+        # Configure yt_dlp options, translating the previous command-line arguments.
+        ydl_opts = {
+            'format': 'wv[height=1080]+ba[ext=m4a]/w[height=1080]',
+            'noplaylist': True,
+            'outtmpl': os.path.join(clip_dir, f"{safe_clip_name}.%(ext)s"),
+            # Use download_ranges for efficient clipping without downloading the whole file.
+            'download_ranges': download_ranges_callback,
+            # Force cuts at keyframes to prevent black screens or corrupted frames.
+            'force_keyframes_at_cuts': True,
+            # Use a postprocessor to ensure the final format is mp4.
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',
+            }],
+            # Add the progress hook to get real-time download speed.
+            'progress_hooks': [ffmpeg_progress_hook],
+        }
+
+        print("Starting download and processing with yt-dlp library...")
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+        # Check if the file was created successfully.
+        if not os.path.exists(final_output_path):
+            raise FileNotFoundError(f"Output file was not created: {final_output_path}")
+
+        print("Clip processed successfully.")
+        return jsonify({'message': 'Clip processed and converted to MP4 successfully', 'output_path': final_output_path})
+
+    except yt_dlp.utils.DownloadError as e:
+        # Handle download-specific errors from the library for better debugging.
+        print(f"A yt-dlp download error occurred: {e}")
+        return jsonify({'error': 'Failed to process video with yt-dlp library.', 'details': str(e)}), 500
+    except Exception as e:
+        # Catch any other unexpected errors.
+        print(f"An unexpected error occurred: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def timestamp_to_seconds(timestamp):
+    """Converts a HH:MM:SS.ms or MM:SS.ms timestamp into total seconds."""
+    parts = timestamp.split(':')
+    hours, minutes, seconds = 0, 0, 0
+    if len(parts) == 3:
+        hours, minutes, seconds = map(float, parts)
+    elif len(parts) == 2:
+        minutes, seconds = map(float, parts)
+    elif len(parts) == 1:
+        seconds = float(parts[0])
+    return hours * 3600 + minutes * 60 + seconds
+
+def build_clip_directory(base_folder, folder=None, season=None, safe_base_name=None):
+    """
+    Build the directory structure for storing clips.
+
+    Args:
+        base_folder (str): The base folder for clips.
+        folder (str, optional): The folder name to include in the path.
+        season (str, optional): The season name to include in the path.
+        safe_base_name (str, optional): The base name for the clip directory.
+
+    Returns:
+        str: The full path to the clip directory.
+    """
+    clip_dir = base_folder
+    if folder and season and safe_base_name :
+        clip_dir = os.path.join(clip_dir, secure_filename(folder))
+        clip_dir = os.path.join(clip_dir, secure_filename(season))
+        clip_dir = os.path.join(clip_dir, safe_base_name)
+
+    os.makedirs(clip_dir, exist_ok=True)
+    print(f"Clip directory created: {clip_dir}")
+    return clip_dir
 
 if __name__ == '__main__':
     create_folders()
