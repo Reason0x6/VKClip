@@ -7,7 +7,7 @@ services:
       - "5000:5000"
     volumes:
       - ./uploads:/app/uploads
-      - ./clips:/app/clips
+      - /var/lib/docker/volumes/downloads/_data:/app/clips
     environment:
       FLASK_APP: app.py
       FLASK_ENV: development
