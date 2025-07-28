@@ -739,12 +739,13 @@ def process_ffmpeg_pre_split():
     start = data.get('start')
     end = data.get('end')
     url = data.get('url')
-    folder = data.get('folder', '') # Default to empty string if not provided
+    folder = data.get('folder', '')
+    season = data.get('season', '')
 
     if not all([clip_name, start, end, url]):
         return jsonify({'error': 'Missing required parameters: clip_name, start, end, url are required.'}), 400
-    
-    print(f"Processing pre-split clip: {clip_name}, start: {start}, end: {end}, url: {url}, folder: {folder}")
+
+    print(f"Processing pre-split clip: {clip_name}, start: {start}, end: {end}, url: {url}, folder: {folder}, season: {season}")
 
     try:
         # Validate that end time is after start time.
@@ -754,7 +755,7 @@ def process_ffmpeg_pre_split():
             return jsonify({'error': 'End time must be after start time.'}), 400
 
         safe_clip_name = secure_filename(clip_name)
-        clip_dir = build_clip_directory(app.config['CLIPS_FOLDER'], folder=folder, safe_base_name=safe_clip_name)
+        clip_dir = build_clip_directory(app.config['CLIPS_FOLDER'], folder=folder, season=season)
         
         # The final output path that yt-dlp will create.
         final_output_path = os.path.join(clip_dir, f"{safe_clip_name}.mp4")
@@ -813,7 +814,7 @@ def timestamp_to_seconds(timestamp):
         seconds = float(parts[0])
     return hours * 3600 + minutes * 60 + seconds
 
-def build_clip_directory(base_folder, folder=None, season=None, safe_base_name=None):
+def build_clip_directory(base_folder, folder=None, season=None):
     """
     Build the directory structure for storing clips.
 
@@ -827,10 +828,10 @@ def build_clip_directory(base_folder, folder=None, season=None, safe_base_name=N
         str: The full path to the clip directory.
     """
     clip_dir = base_folder
-    if folder and season and safe_base_name :
+    if folder:
         clip_dir = os.path.join(clip_dir, secure_filename(folder))
+    if season:
         clip_dir = os.path.join(clip_dir, secure_filename(season))
-        clip_dir = os.path.join(clip_dir, safe_base_name)
 
     os.makedirs(clip_dir, exist_ok=True)
     print(f"Clip directory created: {clip_dir}")

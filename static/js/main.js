@@ -372,6 +372,7 @@ async function processFFmpegPreSplitClips() {
         const end =  constructTimeCode(index, 0, 'end');
         const url = document.getElementById('video-url').value;
         const folder = document.getElementById('folder').value;
+        const season = document.getElementById('season').value;
         console.log(`Processing clip: ${clipName}, Start: ${start}, End: ${end}, URL: ${url}, Folder: ${folder}`);
         try {
             const response = await fetch('/process_ffmpeg_pre_split', {
@@ -384,7 +385,8 @@ async function processFFmpegPreSplitClips() {
                     start,
                     end,
                     url,
-                    folder
+                    folder,
+                    season
                 })
             });
 
