@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export VERSION=$(date '+%Y-%m-%d %H:%M:%S')
+
 ls -l /app/clips
 ls -l /app/uploads
 pip install --upgrade yt-dlp
