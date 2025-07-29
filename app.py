@@ -9,7 +9,6 @@ import shutil
 import json
 from flask import (Flask, request, redirect, url_for, render_template,
                    send_from_directory, flash, jsonify, Response)
-from werkzeug.utils import secure_filename
 import os
 import uuid
 import subprocess
@@ -571,7 +570,7 @@ def process_clips_background(clip_id, form_data, files):
                     clip_progress[clip_id] = {'status': 'error', 'message': f"Segments for clip '{data['name']}' are not in chronological order"}
                     return
 
-            safe_base_name = secure_filename(data['name'])
+            safe_base_name =data['name']
 
             # Build the directory structure
             clip_dir = build_clip_directory(
@@ -754,7 +753,7 @@ def process_ffmpeg_pre_split():
         if end_seconds <= start_seconds:
             return jsonify({'error': 'End time must be after start time.'}), 400
 
-        safe_clip_name = secure_filename(clip_name)
+        safe_clip_name = clip_name
         clip_dir = build_clip_directory(app.config['CLIPS_FOLDER'], folder=folder, season=season)
         
         # The final output path that yt-dlp will create.
@@ -829,9 +828,9 @@ def build_clip_directory(base_folder, folder=None, season=None):
     """
     clip_dir = base_folder
     if folder:
-        clip_dir = os.path.join(clip_dir, secure_filename(folder))
+        clip_dir = os.path.join(clip_dir, folder)
     if season:
-        clip_dir = os.path.join(clip_dir, secure_filename(season))
+        clip_dir = os.path.join(clip_dir, season)
 
     os.makedirs(clip_dir, exist_ok=True)
     print(f"Clip directory created: {clip_dir}")
